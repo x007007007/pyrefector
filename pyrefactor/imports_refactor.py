@@ -180,10 +180,14 @@ def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], in
     return True, ""
 
 
-def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None) -> List[str]:
+def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None, modify_under: Optional[str] = None) -> List[str]:
     changes: List[str] = []
     graph = build_dependency_graph(root)
     diff_chunks: List[str] = []
+    base_root = os.path.abspath(root)
+    target_prefix = None
+    if modify_under:
+        target_prefix = os.path.abspath(modify_under)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__" and not d.startswith(".")]
         for fn in filenames:
@@ -191,6 +195,8 @@ def rewrite_directory(root: str, include_relative: bool = False, allow_control_b
                 continue
             path = os.path.join(dirpath, fn)
             mod = module_name_from_path(path, root)
+            if target_prefix and not os.path.abspath(path).startswith(target_prefix):
+                continue
             changed, diff = rewrite_file(path, mod, graph, include_relative, allow_control_blocks, dry_run)
             if changed:
                 if dry_run and diff:
