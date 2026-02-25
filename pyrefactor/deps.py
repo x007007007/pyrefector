@@ -51,8 +51,22 @@ def resolve_relative(current_module: str, level: int, base: Optional[str]) -> Op
         return None
     return ".".join(parent)
 
+def resolve_relative_pkg(current_module: str, level: int, base: Optional[str], is_init: bool) -> Optional[str]:
+    if level <= 0:
+        return base or None
+    parts = current_module.split(".") if current_module else []
+    pkg_parts = parts if is_init else (parts[:-1] if parts else [])
+    up = level - 1
+    if up > len(pkg_parts):
+        return None
+    parent = pkg_parts[: len(pkg_parts) - up]
+    if base:
+        parent.append(base)
+    if not parent:
+        return base or None
+    return ".".join(parent)
 
-def _imports_in_module_top(tree: ast.Module, current_module: str) -> Set[str]:
+def _imports_in_module_top(tree: ast.Module, current_module: str, is_init: bool) -> Set[str]:
     deps: Set[str] = set()
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -62,7 +76,7 @@ def _imports_in_module_top(tree: ast.Module, current_module: str) -> Set[str]:
             base = node.module
             level = node.level or 0
             if level > 0:
-                resolved = resolve_relative(current_module, level, base)
+                resolved = resolve_relative_pkg(current_module, level, base, is_init)
                 if resolved:
                     deps.add(resolved)
             else:
@@ -82,7 +96,8 @@ def build_dependency_graph(root: str, package_paths: Optional[List[str]] = None)
         except Exception:
             continue
         mod = module_name_from_path_multi(f, roots)
-        graph[mod] = _imports_in_module_top(tree, mod)
+        is_init = os.path.basename(f) == "__init__.py"
+        graph[mod] = _imports_in_module_top(tree, mod, is_init)
     return graph
 
 

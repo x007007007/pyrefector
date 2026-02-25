@@ -1,7 +1,7 @@
 import os
 from typing import List, Tuple, Optional
 import libcst as cst
-from .deps import module_name_from_path_multi, resolve_relative
+from .deps import module_name_from_path_multi, resolve_relative_pkg
 
 
 def _to_cst_module(name: str) -> cst.CSTNode:
@@ -35,17 +35,7 @@ class AbsImportRewriter(cst.CSTTransformer):
                 return updated_node
             parts.reverse()
             base = ".".join(parts)
-        if base is None:
-            parts = self.module_name.split(".") if self.module_name else []
-            pkg_parts = parts if self.is_init else (parts[:-1] if parts else [])
-            if not pkg_parts:
-                return updated_node
-            idx = len(pkg_parts) - (level - 1)
-            if idx <= 0:
-                return updated_node
-            resolved = ".".join(pkg_parts[:idx])
-        else:
-            resolved = resolve_relative(self.module_name, level, base)
+        resolved = resolve_relative_pkg(self.module_name, level, base, self.is_init)
         if not resolved:
             return updated_node
         self.changed = True

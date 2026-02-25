@@ -3,11 +3,11 @@ import difflib
 from typing import List, Tuple, Set, Dict, Optional
 
 import libcst as cst
-from .deps import would_create_cycle, build_dependency_graph, module_name_from_path_multi, resolve_relative
+from .deps import would_create_cycle, build_dependency_graph, module_name_from_path_multi, resolve_relative_pkg
 
 
 class ImportLifter(cst.CSTTransformer):
-    def __init__(self, module_name: str, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False, failfirst: bool = False):
+    def __init__(self, module_name: str, is_init: bool, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False, failfirst: bool = False):
         self.include_relative = include_relative
         self.allow_control_blocks = allow_control_blocks
         self.failfirst = failfirst
@@ -16,6 +16,7 @@ class ImportLifter(cst.CSTTransformer):
         self._in_try = 0
         self._collected: List[cst.CSTNode] = []
         self._module_name = module_name
+        self._is_init = is_init
         self._graph = dep_graph
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
@@ -111,7 +112,7 @@ class ImportLifter(cst.CSTTransformer):
                 parts.reverse()
                 base_name = ".".join(parts)
             if level > 0:
-                resolved = resolve_relative(self._module_name, level, base_name)
+                resolved = resolve_relative_pkg(self._module_name, level, base_name, self._is_init)
                 return resolved
             return base_name
         elif isinstance(node, cst.Import):
@@ -187,7 +188,8 @@ def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], in
         module = cst.parse_module(src)
     except Exception:
         return False, ""
-    transformer = ImportLifter(module_name=module_name, dep_graph=dep_graph, include_relative=include_relative, allow_control_blocks=allow_control_blocks, failfirst=failfirst)
+    is_init = os.path.basename(path) == "__init__.py"
+    transformer = ImportLifter(module_name=module_name, is_init=is_init, dep_graph=dep_graph, include_relative=include_relative, allow_control_blocks=allow_control_blocks, failfirst=failfirst)
     new_module = module.visit(transformer)
     new_src = new_module.code
     if new_src == src:
