@@ -66,9 +66,10 @@ def resolve_relative_pkg(current_module: str, level: int, base: Optional[str], i
         return base or None
     return ".".join(parent)
 
-def _imports_in_module_top(tree: ast.Module, current_module: str, is_init: bool) -> Set[str]:
+def _imports_in_module(tree: ast.Module, current_module: str, is_init: bool) -> Set[str]:
     deps: Set[str] = set()
-    for node in tree.body:
+    
+    def traverse(node):
         if isinstance(node, ast.Import):
             for a in node.names:
                 deps.add(a.name)
@@ -82,6 +83,43 @@ def _imports_in_module_top(tree: ast.Module, current_module: str, is_init: bool)
             else:
                 if base:
                     deps.add(base)
+        elif isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+            for stmt in node.body:
+                traverse(stmt)
+        elif isinstance(node, ast.Try):
+            for stmt in node.body:
+                traverse(stmt)
+            for handler in node.handlers:
+                for stmt in handler.body:
+                    traverse(stmt)
+            if hasattr(node, 'orelse'):
+                for stmt in node.orelse:
+                    traverse(stmt)
+            if hasattr(node, 'finalbody'):
+                for stmt in node.finalbody:
+                    traverse(stmt)
+        elif isinstance(node, ast.TryStar):
+            for stmt in node.body:
+                traverse(stmt)
+            for handler in node.handlers:
+                for stmt in handler.body:
+                    traverse(stmt)
+            if hasattr(node, 'orelse'):
+                for stmt in node.orelse:
+                    traverse(stmt)
+            if hasattr(node, 'finalbody'):
+                for stmt in node.finalbody:
+                    traverse(stmt)
+        elif isinstance(node, (ast.If, ast.For, ast.While, ast.With, ast.AsyncWith)):
+            for stmt in node.body:
+                traverse(stmt)
+            if hasattr(node, 'orelse'):
+                for stmt in node.orelse:
+                    traverse(stmt)
+    
+    for node in tree.body:
+        traverse(node)
+    
     return deps
 
 
@@ -97,7 +135,7 @@ def build_dependency_graph(root: str, package_paths: Optional[List[str]] = None)
             continue
         mod = module_name_from_path_multi(f, roots)
         is_init = os.path.basename(f) == "__init__.py"
-        graph[mod] = _imports_in_module_top(tree, mod, is_init)
+        graph[mod] = _imports_in_module(tree, mod, is_init)
     return graph
 
 
