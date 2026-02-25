@@ -1,0 +1,12 @@
+--- examples/failfirst_project/pkg/a.py
++++ examples/failfirst_project/pkg/a.py
+@@ -1,7 +1,3 @@
++import pkg.opt
+ def use():
+-    try:
+-        import pkg.opt
+-        return pkg.opt.value
+-    except ImportError:
+-        x = 1
+-        return x
++    return pkg.opt.value
