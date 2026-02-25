@@ -1,0 +1,13 @@
+--- examples/try_complex_project/pkg/a.py
++++ examples/try_complex_project/pkg/a.py
+@@ -1,9 +1,7 @@
++import pkg.opt
+ def use():
+     try:
+-        import pkg.opt
+         v = pkg.opt.value
+-    except ImportError:
+-        v = 0
+     except ValueError:
+         v = -1
+     else:
