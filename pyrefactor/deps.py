@@ -3,7 +3,7 @@ import ast
 from typing import Dict, Set, List, Optional
 
 
-def _py_files(root: str) -> List[str]:
+def list_python_files(root: str) -> List[str]:
     paths: List[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__" and not d.startswith(".")]
@@ -11,6 +11,9 @@ def _py_files(root: str) -> List[str]:
             if fn.endswith(".py"):
                 paths.append(os.path.join(dirpath, fn))
     return paths
+
+# 保留向后兼容性
+_py_files = list_python_files
 
 
 def module_name_from_path(path: str, root: str) -> str:
