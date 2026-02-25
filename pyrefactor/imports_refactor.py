@@ -7,11 +7,13 @@ from .deps import would_create_cycle, build_dependency_graph, module_name_from_p
 
 
 class ImportLifter(cst.CSTTransformer):
-    def __init__(self, module_name: str, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False):
+    def __init__(self, module_name: str, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False, failfirst: bool = False):
         self.include_relative = include_relative
         self.allow_control_blocks = allow_control_blocks
+        self.failfirst = failfirst
         self._in_function_or_class = 0
         self._in_control_block = 0
+        self._in_try = 0
         self._collected: List[cst.CSTNode] = []
         self._module_name = module_name
         self._graph = dep_graph
@@ -60,15 +62,33 @@ class ImportLifter(cst.CSTTransformer):
 
     def visit_Try(self, node: cst.Try) -> bool:
         self._in_control_block += 1
+        self._in_try += 1
         return True
     def leave_Try(self, original_node: cst.Try, updated_node: cst.Try) -> cst.Try:
         self._in_control_block -= 1
-        return updated_node
+        self._in_try -= 1
+        if not self.failfirst:
+            return updated_node
+        handlers = list(updated_node.handlers or ())
+        kept_handlers: List[cst.ExceptHandler] = []
+        for h in handlers:
+            t = h.type
+            is_import_error = False
+            if isinstance(t, cst.Name) and t.value == "ImportError":
+                is_import_error = True
+            if not is_import_error:
+                kept_handlers.append(h)
+        if kept_handlers or updated_node.finalbody is not None or updated_node.orelse is not None:
+            return updated_node.with_changes(handlers=tuple(kept_handlers))
+        body_stmts = list(updated_node.body.body)
+        if not body_stmts:
+            return cst.RemoveFromParent()
+        return cst.FlattenSentinel(body_stmts)
 
     def _is_safe_to_lift(self) -> bool:
         if self._in_function_or_class <= 0:
             return False
-        if not self.allow_control_blocks and self._in_control_block > 0:
+        if not self.allow_control_blocks and self._in_control_block > 0 and not (self.failfirst and self._in_try > 0):
             return False
         return True
 
@@ -160,14 +180,14 @@ class ImportLifter(cst.CSTTransformer):
         return updated_node.with_changes(body=tuple(new_body))
 
 
-def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False) -> Tuple[bool, str]:
+def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, failfirst: bool = False) -> Tuple[bool, str]:
     with open(path, "r", encoding="utf-8") as f:
         src = f.read()
     try:
         module = cst.parse_module(src)
     except Exception:
         return False, ""
-    transformer = ImportLifter(module_name=module_name, dep_graph=dep_graph, include_relative=include_relative, allow_control_blocks=allow_control_blocks)
+    transformer = ImportLifter(module_name=module_name, dep_graph=dep_graph, include_relative=include_relative, allow_control_blocks=allow_control_blocks, failfirst=failfirst)
     new_module = module.visit(transformer)
     new_src = new_module.code
     if new_src == src:
@@ -180,7 +200,7 @@ def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], in
     return True, ""
 
 
-def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None, modify_under: Optional[str] = None) -> List[str]:
+def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None, modify_under: Optional[str] = None, failfirst: bool = False) -> List[str]:
     changes: List[str] = []
     graph = build_dependency_graph(root)
     diff_chunks: List[str] = []
@@ -197,7 +217,7 @@ def rewrite_directory(root: str, include_relative: bool = False, allow_control_b
             mod = module_name_from_path(path, root)
             if target_prefix and not os.path.abspath(path).startswith(target_prefix):
                 continue
-            changed, diff = rewrite_file(path, mod, graph, include_relative, allow_control_blocks, dry_run)
+            changed, diff = rewrite_file(path, mod, graph, include_relative, allow_control_blocks, dry_run, failfirst)
             if changed:
                 if dry_run and diff:
                     diff_chunks.append(diff)
