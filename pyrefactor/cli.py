@@ -17,6 +17,7 @@ def main() -> None:
     p_refactor.add_argument("--absimport", action="store_true", help="先将相对导入改写为绝对导入再进行提升")
     p_refactor.add_argument("--modify-under", help="仅修改此子目录下的文件，分析范围仍为path")
     p_refactor.add_argument("--failfirst", action="store_true", help="将 try/except ImportError 中的导入提前并移除 ImportError 处理")
+    p_refactor.add_argument("--package-path", action="append", help="额外的包根目录，可重复指定", dest="package_path")
 
     p_graph = subparsers.add_parser("graph", help="生成 Mermaid 图")
     p_graph.add_argument("type", choices=["imports", "calls"], help="图类型")
@@ -30,8 +31,8 @@ def main() -> None:
     if args.cmd == "refc_import":
         if args.absimport:
             from .abs_imports import rewrite_abs_directory
-            rewrite_abs_directory(args.modify_under or args.path)
-        changes = rewrite_directory(args.path, include_relative=args.include_relative, allow_control_blocks=args.allow_control_blocks, dry_run=args.dry_run, output_diff=args.output_diff, modify_under=args.modify_under, failfirst=args.failfirst)
+            rewrite_abs_directory(args.modify_under or args.path, package_paths=args.package_path)
+        changes = rewrite_directory(args.path, include_relative=args.include_relative, allow_control_blocks=args.allow_control_blocks, dry_run=args.dry_run, output_diff=args.output_diff, modify_under=args.modify_under, failfirst=args.failfirst, package_paths=args.package_path)
         if not changes:
             print("没有发现需要更新的导入")
             return

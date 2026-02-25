@@ -3,7 +3,7 @@ import difflib
 from typing import List, Tuple, Set, Dict, Optional
 
 import libcst as cst
-from .deps import would_create_cycle, build_dependency_graph, module_name_from_path, resolve_relative
+from .deps import would_create_cycle, build_dependency_graph, module_name_from_path_multi, resolve_relative
 
 
 class ImportLifter(cst.CSTTransformer):
@@ -200,9 +200,9 @@ def rewrite_file(path: str, module_name: str, dep_graph: Dict[str, Set[str]], in
     return True, ""
 
 
-def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None, modify_under: Optional[str] = None, failfirst: bool = False) -> List[str]:
+def rewrite_directory(root: str, include_relative: bool = False, allow_control_blocks: bool = False, dry_run: bool = False, output_diff: Optional[str] = None, modify_under: Optional[str] = None, failfirst: bool = False, package_paths: Optional[List[str]] = None) -> List[str]:
     changes: List[str] = []
-    graph = build_dependency_graph(root)
+    graph = build_dependency_graph(root, package_paths=package_paths)
     diff_chunks: List[str] = []
     base_root = os.path.abspath(root)
     target_prefix = None
@@ -214,7 +214,8 @@ def rewrite_directory(root: str, include_relative: bool = False, allow_control_b
             if not fn.endswith(".py"):
                 continue
             path = os.path.join(dirpath, fn)
-            mod = module_name_from_path(path, root)
+            roots = package_paths or [root]
+            mod = module_name_from_path_multi(path, roots)
             if target_prefix and not os.path.abspath(path).startswith(target_prefix):
                 continue
             changed, diff = rewrite_file(path, mod, graph, include_relative, allow_control_blocks, dry_run, failfirst)

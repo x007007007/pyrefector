@@ -1,7 +1,7 @@
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import libcst as cst
-from .deps import module_name_from_path, resolve_relative
+from .deps import module_name_from_path_multi, resolve_relative
 
 
 def _to_cst_module(name: str) -> cst.CSTNode:
@@ -41,14 +41,14 @@ class AbsImportRewriter(cst.CSTTransformer):
         return updated_node.with_changes(module=_to_cst_module(resolved), relative=())
 
 
-def rewrite_abs_file(path: str, root: str) -> bool:
+def rewrite_abs_file(path: str, roots: List[str]) -> bool:
     with open(path, "r", encoding="utf-8") as f:
         src = f.read()
     try:
         module = cst.parse_module(src)
     except Exception:
         return False
-    modname = module_name_from_path(path, root)
+    modname = module_name_from_path_multi(path, roots)
     rewriter = AbsImportRewriter(modname)
     new_module = module.visit(rewriter)
     if not rewriter.changed:
@@ -58,14 +58,15 @@ def rewrite_abs_file(path: str, root: str) -> bool:
     return True
 
 
-def rewrite_abs_directory(root: str) -> List[str]:
+def rewrite_abs_directory(root: str, package_paths: Optional[List[str]] = None) -> List[str]:
     changed: List[str] = []
+    roots = package_paths or [root]
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__" and not d.startswith(".")]
         for fn in filenames:
             if not fn.endswith(".py"):
                 continue
             path = os.path.join(dirpath, fn)
-            if rewrite_abs_file(path, root):
+            if rewrite_abs_file(path, roots):
                 changed.append(path)
     return changed

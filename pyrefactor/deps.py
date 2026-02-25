@@ -23,6 +23,20 @@ def module_name_from_path(path: str, root: str) -> str:
         parts.append(p)
     return ".".join(parts)
 
+def module_name_from_path_multi(path: str, roots: List[str]) -> str:
+    abspath = os.path.abspath(path)
+    best_root = None
+    best_len = -1
+    for r in roots:
+        ar = os.path.abspath(r)
+        if abspath.startswith(ar.rstrip(os.sep) + os.sep):
+            l = len(ar)
+            if l > best_len:
+                best_len = l
+                best_root = ar
+    if best_root is None:
+        best_root = os.path.abspath(roots[0])
+    return module_name_from_path(path, best_root)
 
 def resolve_relative(current_module: str, level: int, base: Optional[str]) -> Optional[str]:
     if level <= 0:
@@ -57,8 +71,9 @@ def _imports_in_module_top(tree: ast.Module, current_module: str) -> Set[str]:
     return deps
 
 
-def build_dependency_graph(root: str) -> Dict[str, Set[str]]:
+def build_dependency_graph(root: str, package_paths: Optional[List[str]] = None) -> Dict[str, Set[str]]:
     graph: Dict[str, Set[str]] = {}
+    roots = package_paths or [root]
     for f in _py_files(root):
         try:
             with open(f, "r", encoding="utf-8") as fh:
@@ -66,7 +81,7 @@ def build_dependency_graph(root: str) -> Dict[str, Set[str]]:
             tree = ast.parse(src)
         except Exception:
             continue
-        mod = module_name_from_path(f, root)
+        mod = module_name_from_path_multi(f, roots)
         graph[mod] = _imports_in_module_top(tree, mod)
     return graph
 
