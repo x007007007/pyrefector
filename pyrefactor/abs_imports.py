@@ -13,8 +13,9 @@ def _to_cst_module(name: str) -> cst.CSTNode:
 
 
 class AbsImportRewriter(cst.CSTTransformer):
-    def __init__(self, module_name: str):
+    def __init__(self, module_name: str, is_init: bool):
         self.module_name = module_name
+        self.is_init = is_init
         self.changed = False
 
     def leave_ImportFrom(self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom) -> cst.ImportFrom:
@@ -34,7 +35,17 @@ class AbsImportRewriter(cst.CSTTransformer):
                 return updated_node
             parts.reverse()
             base = ".".join(parts)
-        resolved = resolve_relative(self.module_name, level, base)
+        if base is None:
+            parts = self.module_name.split(".") if self.module_name else []
+            pkg_parts = parts if self.is_init else (parts[:-1] if parts else [])
+            if not pkg_parts:
+                return updated_node
+            idx = len(pkg_parts) - (level - 1)
+            if idx <= 0:
+                return updated_node
+            resolved = ".".join(pkg_parts[:idx])
+        else:
+            resolved = resolve_relative(self.module_name, level, base)
         if not resolved:
             return updated_node
         self.changed = True
@@ -49,7 +60,8 @@ def rewrite_abs_file(path: str, roots: List[str]) -> bool:
     except Exception:
         return False
     modname = module_name_from_path_multi(path, roots)
-    rewriter = AbsImportRewriter(modname)
+    is_init = os.path.basename(path) == "__init__.py"
+    rewriter = AbsImportRewriter(modname, is_init)
     new_module = module.visit(rewriter)
     if not rewriter.changed:
         return False
