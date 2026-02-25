@@ -38,19 +38,6 @@ def module_name_from_path_multi(path: str, roots: List[str]) -> str:
         best_root = os.path.abspath(roots[0])
     return module_name_from_path(path, best_root)
 
-def resolve_relative(current_module: str, level: int, base: Optional[str]) -> Optional[str]:
-    if level <= 0:
-        return base or None
-    parts = current_module.split(".") if current_module else []
-    if level > len(parts):
-        return None
-    parent = parts[: len(parts) - level]
-    if base:
-        parent.append(base)
-    if not parent:
-        return None
-    return ".".join(parent)
-
 def resolve_relative_pkg(current_module: str, level: int, base: Optional[str], is_init: bool) -> Optional[str]:
     if level <= 0:
         return base or None

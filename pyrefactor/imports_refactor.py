@@ -87,7 +87,7 @@ class ImportLifter(cst.CSTTransformer):
         return cst.FlattenSentinel(body_stmts)
 
     def _is_safe_to_lift(self) -> bool:
-        if self._in_function_or_class <= 0:
+        if self._in_function_or_class <= 0 and self._in_control_block <= 0:
             return False
         if not self.allow_control_blocks and self._in_control_block > 0 and not (self.failfirst and self._in_try > 0):
             return False
