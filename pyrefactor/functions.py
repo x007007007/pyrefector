@@ -11,41 +11,48 @@ class VariableScopeAnalyzer:
     def __init__(self):
         self.defined_variables = set()
         self.used_variables = set()
-        self.is_in_function = False
+        self.scope_stack = []  # 用于跟踪嵌套作用域的变量
     
     def visit_Assign(self, node):
         """处理赋值语句"""
-        if self.is_in_function:
+        if self.scope_stack:
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     self.defined_variables.add(target.id)
     
     def visit_AnnAssign(self, node):
         """处理注释赋值"""
-        if self.is_in_function and isinstance(node.target, ast.Name):
+        if self.scope_stack and isinstance(node.target, ast.Name):
             self.defined_variables.add(node.target.id)
     
     def visit_For(self, node):
         """处理 for 循环"""
-        if self.is_in_function and isinstance(node.target, ast.Name):
+        if self.scope_stack and isinstance(node.target, ast.Name):
             self.defined_variables.add(node.target.id)
     
     def visit_Name(self, node):
         """处理变量引用"""
-        if self.is_in_function and isinstance(node, ast.Name):
+        if self.scope_stack and isinstance(node, ast.Name):
             self.used_variables.add(node.id)
     
     def visit_FunctionDef(self, node):
         """处理函数定义"""
-        self.is_in_function = True
+        # 保存当前作用域
+        previous_scope = list(self.scope_stack)
         
+        # 进入新的作用域
+        self.scope_stack.append(node)
+        
+        # 添加函数参数到定义的变量中
         for arg in node.args.args:
             self.defined_variables.add(arg.arg)
         
+        # 遍历函数体
         for stmt in node.body:
             self.visit(stmt)
         
-        self.is_in_function = False
+        # 恢复之前的作用域
+        self.scope_stack = previous_scope
     
     def visit(self, node):
         """通用访问方法"""
