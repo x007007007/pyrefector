@@ -32,6 +32,7 @@ def main() -> None:
     p_split.add_argument("path", help="要处理的目录或文件路径")
     p_split.add_argument("--dry-run", action="store_true", help="仅输出 diff")
     p_split.add_argument("--output-diff", help="将统一 diff 输出到文件")
+    p_split.add_argument("--process-methods", action="store_true", help="同时处理类内部的方法")
 
     args = parser.parse_args()
     if args.cmd == "refc_import":
@@ -62,7 +63,7 @@ def main() -> None:
             return
         sys.stdout.write(out + "\n")
     elif args.cmd == "split_func":
-        changes = rewrite_directory_for_functions(args.path, dry_run=args.dry_run, output_diff=args.output_diff)
+        changes = rewrite_directory_for_functions(args.path, dry_run=args.dry_run, output_diff=args.output_diff, process_methods=args.process_methods)
         if not changes:
             print("没有发现需要拆分的函数")
             return
