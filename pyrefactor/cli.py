@@ -3,6 +3,7 @@ import sys
 from .imports_refactor import rewrite_directory
 from .graph import build_import_graph_mermaid, build_call_graph_mermaid, build_function_flow_mermaid
 from .functions import rewrite_directory_for_functions
+from .defensive_try_except import rewrite_directory_for_defensive_try_except
 
 
 def main() -> None:
@@ -33,6 +34,12 @@ def main() -> None:
     p_split.add_argument("--dry-run", action="store_true", help="仅输出 diff")
     p_split.add_argument("--output-diff", help="将统一 diff 输出到文件")
     p_split.add_argument("--process-methods", action="store_true", help="同时处理类内部的方法")
+
+    p_remove_try = subparsers.add_parser("remove_defensive_try", help="移除防御式 try-except 语句（捕获所有异常且 try 块过长的）")
+    p_remove_try.add_argument("path", help="要处理的目录或文件路径")
+    p_remove_try.add_argument("--max-length", type=int, default=30, help="try 块长度阈值（默认: 30）")
+    p_remove_try.add_argument("--dry-run", action="store_true", help="仅输出 diff")
+    p_remove_try.add_argument("--output-diff", help="将统一 diff 输出到文件")
 
     args = parser.parse_args()
     if args.cmd == "refc_import":
@@ -67,6 +74,30 @@ def main() -> None:
         if not changes:
             print("没有发现需要拆分的函数")
             return
+        if args.dry_run:
+            if args.output_diff:
+                print(f"已写出 diff 到 {args.output_diff}")
+            else:
+                print("已生成 diff")
+        else:
+            print(f"已更新 {len(changes)} 个文件")
+    elif args.cmd == "remove_defensive_try":
+        # 准备输出 diff 文件
+        if args.output_diff:
+            with open(args.output_diff, 'w', encoding='utf-8') as f:
+                pass  # 清空文件
+        
+        changes = rewrite_directory_for_defensive_try_except(
+            args.path,
+            max_try_length=args.max_length,
+            dry_run=args.dry_run,
+            output_diff=args.output_diff
+        )
+        
+        if not changes:
+            print("没有发现需要移除的防御式 try-except 语句")
+            return
+        
         if args.dry_run:
             if args.output_diff:
                 print(f"已写出 diff 到 {args.output_diff}")

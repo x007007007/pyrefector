@@ -23,6 +23,21 @@
 - 依赖图分析
 - 循环依赖检测
 
+### 3. 防御式 Try-Except 移除（Defensive Try-Except Removal）
+
+该工具新增了移除防御式 try-except 语句的功能，专门针对以下场景：
+
+- **捕获所有异常的语句**：`except:` 或 `except Exception:`
+- **过长的 try 块**：超过指定长度的 try 块（默认30行）
+- **误吞异常的代码**：缺乏针对性异常处理的防御式编程
+
+主要功能特点：
+- 精确识别防御式 try-except 模式
+- 可自定义长度阈值
+- 支持目录扫描和递归处理
+- 提供 dry-run 预览功能
+- 输出详细的修改报告
+
 ## 安装
 
 ```bash
@@ -70,16 +85,62 @@ refactor_imports("path/to/your/file.py")
 refactor_imports("path/to/your/directory")
 ```
 
+### 防御式 Try-Except 移除
+
+```python
+from pyrefactor.defensive_try_except import (
+    rewrite_file_for_defensive_try_except,
+    rewrite_directory_for_defensive_try_except
+)
+
+# 处理单个文件
+result = rewrite_file_for_defensive_try_except(
+    "path/to/your/file.py",
+    max_try_length=30,  # 默认值
+    dry_run=True        # 预览模式
+)
+
+# 处理整个目录
+modified_files = rewrite_directory_for_defensive_try_except(
+    "path/to/your/directory",
+    max_try_length=30,
+    dry_run=False,
+    output_diff="changes.diff"  # 输出差异到文件
+)
+```
+
 ## 命令行接口
 
 该工具还提供了命令行接口：
 
 ```bash
 # 函数拆分
-python -m pyrefactor.cli functions --help
+python -m pyrefactor.cli split_func --help
 
 # 导入重构
-python -m pyrefactor.cli imports --help
+python -m pyrefactor.cli refc_import --help
+
+# 防御式 try-except 移除
+python -m pyrefactor.cli remove_defensive_try --help
+
+# 查看所有命令
+python -m pyrefactor.cli --help
+```
+
+### 防御式 Try-Except 移除命令示例
+
+```bash
+# 查看帮助信息
+python -m pyrefactor.cli remove_defensive_try --help
+
+# 处理单个文件（预览模式）
+python -m pyrefactor.cli remove_defensive_try path/to/your/file.py --max-length 30 --dry-run
+
+# 处理整个目录（实际修改）
+python -m pyrefactor.cli remove_defensive_try path/to/your/directory --max-length 20
+
+# 处理文件并输出差异
+python -m pyrefactor.cli remove_defensive_try path/to/your/file.py --max-length 15 --dry-run --output-diff changes.diff
 ```
 
 ## 测试
@@ -92,9 +153,28 @@ pytest tests/
 
 # 运行特定测试文件
 pytest tests/test_functions.py -v
+pytest tests/test_import_refactor.py -v
+pytest tests/test_defensive_try_except.py -v
 
 # 运行函数传参分析测试
 pytest tests/test_function_parameter_analysis.py -v
+```
+
+### 新增的防御式 Try-Except 测试
+
+项目新增了专门针对防御式 try-except 移除功能的测试文件：
+
+```bash
+# 运行防御式 try-except 测试
+pytest tests/test_defensive_try_except.py -v
+
+# 该文件包含以下测试：
+# - 基本的防御式 try-except 检测
+# - except Exception: 语句的检测
+# - 特定异常捕获的识别（不被识别为防御式）
+# - 文件重写功能测试
+# - 无变化情况的处理
+```
 ```
 
 ## 项目结构
@@ -109,16 +189,27 @@ python-refactor-tool/
 │   ├── abs_imports.py      # 绝对导入处理
 │   ├── cli.py             # 命令行接口
 │   ├── deps.py            # 依赖关系分析
+│   ├── defensive_try_except.py # 防御式 try-except 移除实现
 │   ├── functions.py       # 函数拆分实现
 │   ├── graph.py           # 依赖图构建
 │   └── imports_refactor.py # 导入重构实现
 ├── tests/                 # 单元测试
 │   ├── test_functions.py
 │   ├── test_import_refactor.py
+│   ├── test_defensive_try_except.py # 防御式 try-except 测试
 │   ├── test_function_parameter_analysis.py
 │   └── ...
 └── README.md
 ```
+
+### 新增的防御式 Try-Except 实现模块
+
+`pyrefactor/defensive_try_except.py` 是新增的核心实现模块，包含：
+
+- `is_defensive_try_except()`：识别防御式 try-except 语句的核心算法
+- `DefensiveTryExceptTransformer`：使用 LibCST 进行代码修改的转换器类
+- `rewrite_file_for_defensive_try_except()`：单文件处理函数
+- `rewrite_directory_for_defensive_try_except()`：目录扫描和递归处理函数
 
 ## 开发
 
