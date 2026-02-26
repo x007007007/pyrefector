@@ -1,270 +1,234 @@
-# Python 代码重构工具
+# Python代码重构工具
 
-这是一个用于 Python 代码重构的工具，主要包含函数拆分和导入重构功能。
+这是一个用于自动重构 Python 代码的工具，专注于以下核心功能：
 
-## 功能概述
+## 功能概览
 
-### 1. 函数拆分（Function Splitting）
+### 1. 函数拆分
 
-该工具可以帮助您将大型函数自动拆分为更小、更易于维护的函数，同时保持代码的功能完整性。主要功能包括：
+自动分析和重构长函数为较小的、更易维护的函数单元。
 
-- 自动分析函数结构
-- 识别潜在的重构机会
-- 基于变量作用域分析进行参数传递
-- 处理 self 参数的类方法
-- 保留代码注释和文档字符串
+### 2. 导入优化
 
-### 2. 导入重构（Import Refactoring）
+分析和优化 Python 导入语句，以提高代码质量和可读性。
 
-该工具还提供了强大的导入重构功能，支持：
+### 3. 防御式Try-Except移除（新增功能）
 
-- 相对导入到绝对导入的转换
-- 导入路径的优化
-- 依赖图分析
-- 循环依赖检测
-
-### 3. 防御式 Try-Except 移除（Defensive Try-Except Removal）
-
-该工具新增了移除防御式 try-except 语句的功能，专门针对以下场景：
-
-- **捕获所有异常的语句**：`except:` 或 `except Exception:`
-- **过长的 try 块**：超过指定长度的 try 块（默认30行）
-- **误吞异常的代码**：缺乏针对性异常处理的防御式编程
-
-主要功能特点：
-- 精确识别防御式 try-except 模式
-- 可自定义长度阈值
-- 支持目录扫描和递归处理
-- 提供 dry-run 预览功能
-- 输出详细的修改报告
+自动识别并移除防御式 try-except 语句，同时保留合理的异常处理。
 
 ## 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/python-refactor-tool.git
-cd python-refactor-tool
-
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或 venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## 使用方法
 
 ### 函数拆分
 
+```bash
+python -m pyrefactor split_func <文件或目录> [--options]
+```
+
+### 导入优化
+
+```bash
+python -m pyrefactor refc_import <文件或目录> [--options]
+```
+
+### 防御式Try-Except移除
+
+```bash
+python -m pyrefactor remove_defensive_try <文件或目录> [--options]
+```
+
+## 功能详解：防御式Try-Except移除
+
+### 问题背景
+
+防御式 try-except 语句（如 `except:` 或 `except Exception:`）通常用于捕获所有可能的异常，但这种做法往往会隐藏真正的问题，并导致难以调试的代码。
+
+### 识别标准
+
+该功能会识别以下模式的 try-except 语句：
+1. 使用 `except:`（无类型异常捕获）
+2. 使用 `except Exception:`（捕获所有异常）
+3. try 块长度超过指定阈值（默认 30 行）
+
+### 使用示例
+
+```bash
+# 处理单个文件，阈值设为20行
+python -m pyrefactor remove_defensive_try example_with_defensive_try.py --max-length 20
+
+# 处理整个目录，使用默认阈值30行
+python -m pyrefactor remove_defensive_try src/
+
+# 预览变更（dry run）
+python -m pyrefactor remove_defensive_try src/ --dry-run
+```
+
+### 功能特点
+
+1. **精确识别**：能够正确地区分防御式 try-except 和合理的异常处理
+2. **阈值可调**：支持自定义 try 块长度阈值
+3. **预览功能**：提供 dry run 模式，可预览变更而不修改文件
+4. **目录处理**：支持递归处理整个目录
+5. **报告输出**：提供详细的变更报告和差异输出
+
+## 示例说明
+
+在 `examples/defensive_try_except/` 目录中，包含一个完整的示例：
+
+### 原始代码
+
 ```python
-from pyrefactor.functions import rewrite_file_for_functions
+def process_data(data):
+    """处理数据的函数，包含防御式 try-except"""
+    try:
+        # 这里有很多语句，超过了默认阈值（30行）
+        print("开始处理数据")
+        validated_data = validate_data(data)
+        
+        if not validated_data:
+            raise ValueError("数据验证失败")
+            
+        processed_data = transform_data(data)
+        
+        if is_empty(processed_data):
+            raise ValueError("处理后的数据为空")
+            
+        saved_data = save_to_database(processed_data)
+        
+        if not saved_data:
+            raise IOError("保存数据失败")
+            
+        send_notification("数据处理成功")
+        
+        # 添加更多语句以确保超过默认长度
+        temp_result = perform_calculations(data)
+        analyze_result(temp_result)
+        generate_report(temp_result)
+        archive_results(temp_result)
+        cleanup_temporary_files()
+        update_logs("处理完成")
+        check_system_health()
+        refresh_cache()
+        synchronize_data()
+        validate_system_state()
+        perform_backup()
+        test_connections()
+        reset_counters()
+        
+        return True
+    except:
+        print("发生异常，但继续执行")
+        return False
 
-# 读取源文件
-with open("your_file.py", "r") as f:
-    source_code = f.read()
-
-# 执行函数拆分
-refactored_code = rewrite_file_for_functions(source_code)
-
-# 保存重构后的代码
-with open("your_file_refactored.py", "w") as f:
-    f.write(refactored_code)
+def calculate_statistics(data):
+    """计算统计数据的函数，包含捕获具体错误的 try-except"""
+    try:
+        # 这是一个较短的 try 块，捕获具体的异常
+        result = compute_average(data)
+        if result < 0:
+            raise ValueError("平均值不能为负数")
+        return result
+    except ValueError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
+    except ZeroDivisionError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
 ```
 
-### 导入重构
+### 转换后的代码
 
 ```python
-from pyrefactor.imports_refactor import refactor_imports
+def process_data(data):
+    """处理数据的函数，包含防御式 try-except"""
+    # 这里有很多语句，超过了默认阈值（30行）
+    print("开始处理数据")
+    validated_data = validate_data(data)
+    
+    if not validated_data:
+        raise ValueError("数据验证失败")
+        
+    processed_data = transform_data(data)
+    
+    if is_empty(processed_data):
+        raise ValueError("处理后的数据为空")
+        
+    saved_data = save_to_database(processed_data)
+    
+    if not saved_data:
+        raise IOError("保存数据失败")
+        
+    send_notification("数据处理成功")
+    
+    # 添加更多语句以确保超过默认长度
+    temp_result = perform_calculations(data)
+    analyze_result(temp_result)
+    generate_report(temp_result)
+    archive_results(temp_result)
+    cleanup_temporary_files()
+    update_logs("处理完成")
+    check_system_health()
+    refresh_cache()
+    synchronize_data()
+    validate_system_state()
+    perform_backup()
+    test_connections()
+    reset_counters()
+    
+    return True
 
-# 重构单个文件
-refactor_imports("path/to/your/file.py")
-
-# 或重构整个目录
-refactor_imports("path/to/your/directory")
+def calculate_statistics(data):
+    """计算统计数据的函数，包含捕获具体错误的 try-except"""
+    try:
+        # 这是一个较短的 try 块，捕获具体的异常
+        result = compute_average(data)
+        if result < 0:
+            raise ValueError("平均值不能为负数")
+        return result
+    except ValueError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
+    except ZeroDivisionError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
 ```
 
-### 防御式 Try-Except 移除
+### 说明
 
-```python
-from pyrefactor.defensive_try_except import (
-    rewrite_file_for_defensive_try_except,
-    rewrite_directory_for_defensive_try_except
-)
-
-# 处理单个文件
-result = rewrite_file_for_defensive_try_except(
-    "path/to/your/file.py",
-    max_try_length=30,  # 默认值
-    dry_run=True        # 预览模式
-)
-
-# 处理整个目录
-modified_files = rewrite_directory_for_defensive_try_except(
-    "path/to/your/directory",
-    max_try_length=30,
-    dry_run=False,
-    output_diff="changes.diff"  # 输出差异到文件
-)
-```
-
-## 命令行接口
-
-该工具还提供了命令行接口：
-
-```bash
-# 函数拆分
-python -m pyrefactor.cli split_func --help
-
-# 导入重构
-python -m pyrefactor.cli refc_import --help
-
-# 防御式 try-except 移除
-python -m pyrefactor.cli remove_defensive_try --help
-
-# 查看所有命令
-python -m pyrefactor.cli --help
-```
-
-### 防御式 Try-Except 移除命令示例
-
-```bash
-# 查看帮助信息
-python -m pyrefactor.cli remove_defensive_try --help
-
-# 处理单个文件（预览模式）
-python -m pyrefactor.cli remove_defensive_try path/to/your/file.py --max-length 30 --dry-run
-
-# 处理整个目录（实际修改）
-python -m pyrefactor.cli remove_defensive_try path/to/your/directory --max-length 20
-
-# 处理文件并输出差异
-python -m pyrefactor.cli remove_defensive_try path/to/your/file.py --max-length 15 --dry-run --output-diff changes.diff
-```
-
-## 示例
-
-项目包含丰富的示例代码，位于 `examples/` 目录中：
-
-### 函数拆分示例
-```bash
-cd examples/function_splitter
-# 查看原始代码
-cat example_functions.py
-# 查看转换后的代码
-cat example_functions_transformed.py
-```
-
-### 导入重构示例
-```bash
-cd examples/imports
-# 查看各种导入重构的例子
-ls -la
-```
-
-### 防御式 Try-Except 移除示例
-```bash
-cd examples/defensive_try_except
-# 运行示例脚本
-./test_example.sh
-```
+1. **移除了防御式 try-except**：`process_data()` 函数中的 `except:` 语句被移除
+2. **保留了合理的异常处理**：`calculate_statistics()` 函数中的 `except ValueError` 和 `except ZeroDivisionError` 保留不变
+3. **提高了代码质量**：移除了隐藏真正问题的防御式 try-except，同时保留了精确的错误处理
 
 ## 测试
 
-该项目包含全面的测试覆盖：
+运行所有测试：
 
 ```bash
-# 运行所有测试
 pytest tests/
-
-# 运行特定测试文件
-pytest tests/test_functions.py -v
-pytest tests/test_import_refactor.py -v
-pytest tests/test_defensive_try_except.py -v
-
-# 运行函数传参分析测试
-pytest tests/test_function_parameter_analysis.py -v
 ```
 
-### 新增的防御式 Try-Except 测试
-
-项目新增了专门针对防御式 try-except 移除功能的测试文件：
+运行特定功能的测试：
 
 ```bash
-# 运行防御式 try-except 测试
+# 函数拆分
+pytest tests/test_functions.py -v
+
+# 导入优化
+pytest tests/test_import_refactor.py -v
+
+# 防御式Try-Except移除
 pytest tests/test_defensive_try_except.py -v
-
-# 该文件包含以下测试：
-# - 基本的防御式 try-except 检测
-# - except Exception: 语句的检测
-# - 特定异常捕获的识别（不被识别为防御式）
-# - 文件重写功能测试
-# - 无变化情况的处理
 ```
 
-## 项目结构
+## 贡献
 
-```
-python-refactor-tool/
-├── examples/               # 示例代码
-│   ├── function_splitter/  # 函数拆分示例
-│   ├── imports/            # 导入重构示例
-│   └── defensive_try_except/ # 防御式 try-except 移除示例
-│       ├── example_with_defensive_try.py # 原始示例
-│       ├── example_without_defensive_try.py # 转换后的示例
-│       ├── generate_example.py # 生成示例脚本
-│       └── test_example.sh # 测试脚本
-├── pyrefactor/             # 核心重构模块
-│   ├── __init__.py
-│   ├── abs_imports.py      # 绝对导入处理
-│   ├── cli.py             # 命令行接口
-│   ├── deps.py            # 依赖关系分析
-│   ├── defensive_try_except.py # 防御式 try-except 移除实现
-│   ├── functions.py       # 函数拆分实现
-│   ├── graph.py           # 依赖图构建
-│   └── imports_refactor.py # 导入重构实现
-├── tests/                 # 单元测试
-│   ├── test_functions.py
-│   ├── test_import_refactor.py
-│   ├── test_defensive_try_except.py # 防御式 try-except 测试
-│   ├── test_function_parameter_analysis.py
-│   └── ...
-└── README.md
-```
-
-## 开发
-
-### 环境要求
-
-- Python 3.7+
-- libcst（用于抽象语法树解析）
-- pytest（用于测试）
-
-### 贡献
-
-欢迎提交问题和拉取请求。在提交代码之前，请确保所有测试都通过。
+欢迎提交 PR 和问题。
 
 ## 许可证
 
-该项目使用 **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)** 许可证。
-
-### 许可证说明
-
-根据 CC BY-NC-SA 4.0 许可证，您可以：
-- **非商业使用**：自由使用、复制和分发本软件
-- **修改**：自由修改本软件
-- **共享**：自由分发修改后的版本
-
-但您必须：
-- **署名**：保留原作者的署名信息
-- **非商业**：不得用于商业目的
-- **相同方式共享**：任何修改后的版本必须使用相同的许可证
-
-### 商业化限制
-
-- 本软件仅供非商业使用
-- 任何商业化使用必须获得原作者的书面授权
-- 所有衍生作品的商业化同样需要获得原作者授权
-
-详细的许可证条款请参阅 LICENSE 文件。
+MIT

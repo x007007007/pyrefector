@@ -43,6 +43,22 @@ def process_data(data):
     return True
 
 
+def calculate_statistics(data):
+    """计算统计数据的函数，包含捕获具体错误的 try-except"""
+    try:
+        # 这是一个较短的 try 块，捕获具体的异常
+        result = compute_average(data)
+        if result < 0:
+            raise ValueError("平均值不能为负数")
+        return result
+    except ValueError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
+    except ZeroDivisionError as e:
+        print(f"计算统计数据时出错: {e}")
+        return 0
+
+
 def validate_data(data):
     """验证数据"""
     print("验证数据")
@@ -81,105 +97,65 @@ def perform_calculations(data):
 def analyze_result(result):
     """分析结果"""
     print("分析结果")
-    return True
 
 
 def generate_report(result):
     """生成报告"""
     print("生成报告")
-    return True
 
 
 def archive_results(result):
     """归档结果"""
     print("归档结果")
-    return True
 
 
 def cleanup_temporary_files():
     """清理临时文件"""
     print("清理临时文件")
-    return True
 
 
 def update_logs(message):
     """更新日志"""
     print("更新日志:", message)
-    return True
 
 
 def check_system_health():
     """检查系统健康"""
     print("检查系统健康")
-    return True
 
 
 def refresh_cache():
     """刷新缓存"""
     print("刷新缓存")
-    return True
 
 
 def synchronize_data():
     """同步数据"""
     print("同步数据")
-    return True
 
 
 def validate_system_state():
     """验证系统状态"""
     print("验证系统状态")
-    return True
 
 
 def perform_backup():
     """执行备份"""
     print("执行备份")
-    return True
 
 
 def test_connections():
     """测试连接"""
     print("测试连接")
-    return True
 
 
 def reset_counters():
     """重置计数器"""
     print("重置计数器")
-    return True
 
 
-def calculate_statistics(data):
-    """计算统计信息，包含 except Exception 模式"""
-    try:
-        # 较短的 try 块，不会被识别为防御式
-        print("计算统计信息")
-        stats = {}
-        stats['count'] = len(data)
-        stats['sum'] = sum(data)
-        stats['average'] = stats['sum'] / stats['count']
-        return stats
-    except Exception as e:
-        print(f"计算统计信息失败: {e}")
-        return {}
-
-
-def main():
-    """主函数"""
-    data = [1, 2, 3, 4, 5]
-    
-    print("=== 示例1：包含防御式 try-except 的函数 ===")
-    success = process_data(data)
-    print(f"处理结果: {'成功' if success else '失败'}")
-    
-    print("\n=== 示例2：正常的 try-except 模式 ===")
-    stats = calculate_statistics(data)
-    print(f"统计信息: {stats}")
-    
-    print("\n=== 示例3：无 try-except 的函数 ===")
-    validate_data(data)
-
-
-if __name__ == "__main__":
-    main()
+def compute_average(data):
+    """计算平均值"""
+    if not data:
+        raise ZeroDivisionError("数据为空，无法计算平均值")
+    return sum(data) / len(data)
