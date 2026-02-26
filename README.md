@@ -143,6 +143,33 @@ python -m pyrefactor.cli remove_defensive_try path/to/your/directory --max-lengt
 python -m pyrefactor.cli remove_defensive_try path/to/your/file.py --max-length 15 --dry-run --output-diff changes.diff
 ```
 
+## 示例
+
+项目包含丰富的示例代码，位于 `examples/` 目录中：
+
+### 函数拆分示例
+```bash
+cd examples/function_splitter
+# 查看原始代码
+cat example_functions.py
+# 查看转换后的代码
+cat example_functions_transformed.py
+```
+
+### 导入重构示例
+```bash
+cd examples/imports
+# 查看各种导入重构的例子
+ls -la
+```
+
+### 防御式 Try-Except 移除示例
+```bash
+cd examples/defensive_try_except
+# 运行示例脚本
+./test_example.sh
+```
+
 ## 测试
 
 该项目包含全面的测试覆盖：
@@ -175,7 +202,6 @@ pytest tests/test_defensive_try_except.py -v
 # - 文件重写功能测试
 # - 无变化情况的处理
 ```
-```
 
 ## 项目结构
 
@@ -183,7 +209,12 @@ pytest tests/test_defensive_try_except.py -v
 python-refactor-tool/
 ├── examples/               # 示例代码
 │   ├── function_splitter/  # 函数拆分示例
-│   └── imports/            # 导入重构示例
+│   ├── imports/            # 导入重构示例
+│   └── defensive_try_except/ # 防御式 try-except 移除示例
+│       ├── example_with_defensive_try.py # 原始示例
+│       ├── example_without_defensive_try.py # 转换后的示例
+│       ├── generate_example.py # 生成示例脚本
+│       └── test_example.sh # 测试脚本
 ├── pyrefactor/             # 核心重构模块
 │   ├── __init__.py
 │   ├── abs_imports.py      # 绝对导入处理
@@ -201,15 +232,6 @@ python-refactor-tool/
 │   └── ...
 └── README.md
 ```
-
-### 新增的防御式 Try-Except 实现模块
-
-`pyrefactor/defensive_try_except.py` 是新增的核心实现模块，包含：
-
-- `is_defensive_try_except()`：识别防御式 try-except 语句的核心算法
-- `DefensiveTryExceptTransformer`：使用 LibCST 进行代码修改的转换器类
-- `rewrite_file_for_defensive_try_except()`：单文件处理函数
-- `rewrite_directory_for_defensive_try_except()`：目录扫描和递归处理函数
 
 ## 开发
 
