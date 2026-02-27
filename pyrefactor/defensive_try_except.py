@@ -9,7 +9,9 @@ def is_defensive_try_except(
     max_try_length: int = 30,
     check_print_log: bool = True,
     check_rethrow: bool = True,
-    check_return_none: bool = True
+    check_return_none: bool = True,
+    filename: str = "",
+    line_number: int = 0
 ) -> bool:
     """判断是否是防御式 try-except 语句
     
@@ -22,17 +24,16 @@ def is_defensive_try_except(
        - 重新抛出异常（check_rethrow=True）
        - 只返回 None（check_return_none=True）
     """
-    print("Checking try node:", type(try_node))
+    if filename and line_number:
+        print(f"=== 文件: {filename}:{line_number} ===")
     
     # 检查是否有 except 子句
     if not try_node.handlers:
-        print("No handlers")
         return False
     
     # 检查 except 子句是否捕获所有异常
     has_catch_all = False
     for handler in try_node.handlers:
-        print(f"Handler type: {handler.type}")
         # except: 没有类型参数
         if handler.type is None:
             has_catch_all = True
@@ -45,15 +46,17 @@ def is_defensive_try_except(
         try_length = len(try_node.body.body)
     else:
         try_length = 0
-    print(f"Try length: {try_length}, max allowed: {max_try_length}")
     
     # 检查 except 块的内容
     has_defensive_handler = False
+    defensive_reason = ""
     for handler in try_node.handlers:
         if has_catch_all:
             # 检查 except 块是否是防御式的
             if is_defensive_except_body(handler.body, check_print_log, check_rethrow, check_return_none):
                 has_defensive_handler = True
+                # 确定具体的防御式类型
+                defensive_reason = get_defensive_reason(handler.body, check_print_log, check_rethrow, check_return_none)
                 break
     
     # 判断是否是防御式 try-except
@@ -61,11 +64,68 @@ def is_defensive_try_except(
         (has_defensive_handler) or  # 有防御式的处理
         (try_length > max_try_length)  # 或 try 块过长
     ):
-        print(f"✓ 检测到防御式 try-except")
+        decision = "✓ 移除防御式的 try-except"
+        if has_defensive_handler:
+            reason = f"原因：{defensive_reason}"
+        else:
+            reason = f"原因：try 块过长 ({try_length} 行 > {max_try_length} 行)"
+        
+        if filename and line_number:
+            print(f"{filename}:{line_number} - {decision}")
+            print(f"  {reason}")
+        else:
+            print(f"{decision}")
+            print(f"  {reason}")
+        
         return True
     
-    print("✗ Not a defensive try-except")
     return False
+
+
+def get_defensive_reason(body, check_print_log, check_rethrow, check_return_none):
+    """获取防御式的具体原因"""
+    # 确保我们处理的是可迭代的 body
+    statements = []
+    
+    if hasattr(body, 'body'):
+        statements = body.body
+    elif isinstance(body, list):
+        statements = body
+    else:
+        statements = [body]
+    
+    has_print = False
+    has_raise = False
+    has_return_none = False
+    
+    for stmt in statements:
+        def check_stmt(s):
+            nonlocal has_print, has_raise, has_return_none
+            if has_print_statement(s):
+                has_print = True
+            elif has_raise_statement(s):
+                has_raise = True
+            elif is_return_none(s):
+                has_return_none = True
+        
+        if isinstance(stmt, cst.SimpleStatementLine):
+            for part in stmt.body:
+                check_stmt(part)
+        else:
+            check_stmt(stmt)
+    
+    if has_print and not has_raise and not has_return_none:
+        return "except 块仅打印日志"
+    if has_raise and not has_print and not has_return_none:
+        return "except 块仅重新抛出异常"
+    if has_return_none and not has_print and not has_raise:
+        return "except 块仅返回 None"
+    if has_print and has_raise and not has_return_none:
+        return "except 块打印日志后重新抛出异常"
+    if has_print and not has_raise and has_return_none:
+        return "except 块打印日志后返回 None"
+    
+    return "except 块包含防御式处理"
 
 
 def is_defensive_except_body(
@@ -85,17 +145,11 @@ def is_defensive_except_body(
     statements = []
     
     if hasattr(body, 'body'):
-        # 如果是块级 body（带有 body 属性）
         statements = body.body
     elif isinstance(body, list):
-        # 如果已经是列表
         statements = body
     else:
-        # 单个语句的情况
         statements = [body]
-    
-    # 检查每个语句
-    print(f"Except block has {len(statements)} statements")
     
     has_print = False
     has_raise = False
@@ -103,9 +157,6 @@ def is_defensive_except_body(
     other_statements = 0
     
     for stmt in statements:
-        print(f"Stmt type: {type(stmt)}, Content: {repr(str(stmt))}")
-        
-        # 辅助函数：检查单个语句的类型
         def check_stmt(s):
             nonlocal has_print, has_raise, has_return_none, other_statements
             if has_print_statement(s):
@@ -117,14 +168,11 @@ def is_defensive_except_body(
             else:
                 other_statements += 1
         
-        # 如果是 SimpleStatementLine，检查其 body 内容
         if isinstance(stmt, cst.SimpleStatementLine):
             for part in stmt.body:
                 check_stmt(part)
         else:
             check_stmt(stmt)
-    
-    print(f"Stats: has_print={has_print}, has_raise={has_raise}, has_return_none={has_return_none}, other_statements={other_statements}")
     
     # 判断是否是防御式异常处理
     if other_statements > 0:
@@ -197,27 +245,52 @@ def has_raise_statement(stmt: cst.CSTNode) -> bool:
 class DefensiveTryExceptTransformer(cst.CSTTransformer):
     """用于移除防御式 try-except 的转换器"""
     
-    def __init__(self, max_try_length: int = 30, dry_run: bool = False,
+    def __init__(self, 
+                 max_try_length: int = 30,
+                 dry_run: bool = False,
                  check_print_log: bool = True,
                  check_rethrow: bool = True,
-                 check_return_none: bool = True):
+                 check_return_none: bool = True,
+                 filename: str = ""):
         self.max_try_length = max_try_length
         self.dry_run = dry_run
         self.changes_made = False
         self.check_print_log = check_print_log
         self.check_rethrow = check_rethrow
         self.check_return_none = check_return_none
+        self.filename = filename
     
     def visit_Everything(self, node: cst.CSTNode) -> Optional[bool]:
         """访问所有节点，专门寻找 Try 节点"""
         if isinstance(node, cst.Try):
-            print(f"Found try node at visit")
             return True
         return True
     
     def leave_Try(self, original_node: cst.Try, updated_node: cst.Try) -> cst.CSTNode:
         """处理 Try 节点"""
-        print(f"Leaving try node, checking if defensive")
+        # 获取行号信息的最简单方法：
+        # 我们使用自定义状态变量在访问过程中跟踪行号
+        if not hasattr(self, '_line_counter'):
+            self._line_counter = 0
+            
+            with open(self.filename, 'r', encoding='utf-8') as f:
+                source_lines = f.readlines()
+                
+            # 使用简单的模式匹配查找 try 语句的行号
+            self._line_mapping = []
+            for i, line in enumerate(source_lines):
+                if 'try:' in line:
+                    self._line_mapping.append(i + 1)
+        
+        line_number = 0
+        if hasattr(self, '_line_mapping') and len(self._line_mapping) > self._line_counter:
+            line_number = self._line_mapping[self._line_counter]
+            self._line_counter += 1
+        else:
+            # 如果未找到匹配，使用简单估算方法
+            node_str = str(original_node)
+            line_number = node_str.count('\n') + 1
+        
         # 找到所有防御式的 except Exception 处理程序
         defensive_handlers = []
         non_defensive_handlers = []
@@ -256,20 +329,37 @@ class DefensiveTryExceptTransformer(cst.CSTTransformer):
         if (has_defensive_handlers) or (has_catch_all and try_length > self.max_try_length):
             self.changes_made = True
             
+            # 获取具体的防御式原因
+            reason = ""
+            if has_defensive_handlers:
+                first_defensive_body = defensive_handlers[0].body
+                reason = get_defensive_reason(first_defensive_body, self.check_print_log, self.check_rethrow, self.check_return_none)
+            else:
+                reason = f"try 块过长 ({try_length} 行 > {self.max_try_length} 行)"
+            
             # 处理后的 try 语句必须至少有一个有效的 except 或 finally 块
             if non_defensive_handlers or original_node.finalbody:
                 # 还有其他处理程序或 finally 块，只移除防御式的 handler
-                print("✓ 移除防御式的 except Exception 处理")
+                decision = "✓ 移除防御式的 except Exception 处理"
+                filename = os.path.basename(self.filename)
+                print(f"{filename}:{line_number} - {decision}")
+                print(f"  原因：{reason}")
                 return original_node.with_changes(
                     handlers=non_defensive_handlers
                 )
             elif original_node.orelse:
                 # 只有 else 块而没有 except 或 finally 块，这是无效的，需要移除整个 try 块
-                print("✓ 移除整个防御式 try-except (else 块无效)")
+                decision = "✓ 移除整个防御式 try-except (else 块无效)"
+                filename = os.path.basename(self.filename)
+                print(f"{filename}:{line_number} - {decision}")
+                print(f"  原因：{reason}")
                 return cst.FlattenSentinel(original_node.body.body)
             else:
                 # 没有其他结构，移除整个 try 块
-                print("✓ 移除整个防御式 try-except")
+                decision = "✓ 移除整个防御式 try-except"
+                filename = os.path.basename(self.filename)
+                print(f"{filename}:{line_number} - {decision}")
+                print(f"  原因：{reason}")
                 return cst.FlattenSentinel(original_node.body.body)
         
         return updated_node
@@ -301,7 +391,8 @@ def rewrite_file_for_defensive_try_except(
             dry_run,
             check_print_log,
             check_rethrow,
-            check_return_none
+            check_return_none,
+            file_path  # 传递完整路径
         )
         
         # 应用转换
