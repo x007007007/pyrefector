@@ -82,8 +82,11 @@ def is_defensive_try_except(
     return False
 
 
-def get_defensive_reason(body, check_print_log, check_rethrow, check_return_none):
-    """获取防御式的具体原因"""
+def get_defensive_reason(body, try_length, max_try_length, check_print_log, check_rethrow, check_return_none):
+    """获取防御式的具体原因
+    
+    try块过长是必须条件，同时满足其他规则之一
+    """
     # 确保我们处理的是可迭代的 body
     statements = []
     
@@ -114,18 +117,29 @@ def get_defensive_reason(body, check_print_log, check_rethrow, check_return_none
         else:
             check_stmt(stmt)
     
-    if has_print and not has_raise and not has_return_none:
-        return "except 块仅打印日志"
-    if has_raise and not has_print and not has_return_none:
-        return "except 块仅重新抛出异常"
-    if has_return_none and not has_print and not has_raise:
-        return "except 块仅返回 None"
-    if has_print and has_raise and not has_return_none:
-        return "except 块打印日志后重新抛出异常"
-    if has_print and not has_raise and has_return_none:
-        return "except 块打印日志后返回 None"
+    reasons = []
     
-    return "except 块包含防御式处理"
+    # try块过长是必须条件，总是首先添加
+    reasons.append(f"try块过长 ({try_length}行 > {max_try_length}行)")
+    
+    # 然后添加其他原因
+    if check_print_log and has_print and not has_raise and not has_return_none:
+        reasons.append("except块仅打印日志")
+    if check_rethrow and has_raise and not has_print and not has_return_none:
+        reasons.append("except块仅重新抛出异常")
+    if check_return_none and has_return_none and not has_print and not has_raise:
+        reasons.append("except块仅返回 None")
+    if check_print_log and check_rethrow and has_print and has_raise and not has_return_none:
+        reasons.append("except块打印日志后重新抛出异常")
+    if check_print_log and check_return_none and has_print and not has_raise and has_return_none:
+        reasons.append("except块打印日志后返回 None")
+    
+    if len(reasons) == 1:
+        # 如果只有 try块过长，说明这是一个简单的过长try块
+        return reasons[0]
+    
+    # 将原因连接起来
+    return "; ".join(reasons)
 
 
 def is_defensive_except_body(
@@ -326,14 +340,22 @@ class DefensiveTryExceptTransformer(cst.CSTTransformer):
             try_length = 0
         
         # 判断是否是防御式 try-except
-        if (has_defensive_handlers) or (has_catch_all and try_length > self.max_try_length):
+        # try块过长是必须条件，同时满足其他规则之一
+        if try_length > self.max_try_length and (has_defensive_handlers or has_catch_all):
             self.changes_made = True
             
             # 获取具体的防御式原因
             reason = ""
             if has_defensive_handlers:
                 first_defensive_body = defensive_handlers[0].body
-                reason = get_defensive_reason(first_defensive_body, self.check_print_log, self.check_rethrow, self.check_return_none)
+                reason = get_defensive_reason(
+                    first_defensive_body, 
+                    try_length, 
+                    self.max_try_length, 
+                    self.check_print_log, 
+                    self.check_rethrow, 
+                    self.check_return_none
+                )
             else:
                 reason = f"try 块过长 ({try_length} 行 > {self.max_try_length} 行)"
             
@@ -341,8 +363,7 @@ class DefensiveTryExceptTransformer(cst.CSTTransformer):
             if non_defensive_handlers or original_node.finalbody:
                 # 还有其他处理程序或 finally 块，只移除防御式的 handler
                 decision = "✓ 移除防御式的 except Exception 处理"
-                filename = os.path.basename(self.filename)
-                print(f"{filename}:{line_number} - {decision}")
+                print(f"{self.filename}:{line_number} - {decision}")
                 print(f"  原因：{reason}")
                 return original_node.with_changes(
                     handlers=non_defensive_handlers
@@ -350,15 +371,13 @@ class DefensiveTryExceptTransformer(cst.CSTTransformer):
             elif original_node.orelse:
                 # 只有 else 块而没有 except 或 finally 块，这是无效的，需要移除整个 try 块
                 decision = "✓ 移除整个防御式 try-except (else 块无效)"
-                filename = os.path.basename(self.filename)
-                print(f"{filename}:{line_number} - {decision}")
+                print(f"{self.filename}:{line_number} - {decision}")
                 print(f"  原因：{reason}")
                 return cst.FlattenSentinel(original_node.body.body)
             else:
                 # 没有其他结构，移除整个 try 块
                 decision = "✓ 移除整个防御式 try-except"
-                filename = os.path.basename(self.filename)
-                print(f"{filename}:{line_number} - {decision}")
+                print(f"{self.filename}:{line_number} - {decision}")
                 print(f"  原因：{reason}")
                 return cst.FlattenSentinel(original_node.body.body)
         
