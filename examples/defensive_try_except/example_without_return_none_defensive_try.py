@@ -9,24 +9,16 @@ import requests
 
 def load_config():
     """加载配置的函数，包含打印日志的 except 块"""
-    try:
-        with open("config.json", "r") as f:
-            config = json.load(f)
-        return config
-    except Exception as e:
-        print(f"无法加载配置: {e}")
-        return {}
+    with open("config.json", "r") as f:
+        config = json.load(f)
+    return config
 
 
 def call_external_api():
     """调用外部 API 的函数，包含重新抛出异常的 except 块"""
-    try:
-        response = requests.get("https://api.example.com/data")
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"API 调用失败: {e}")
-        raise
+    response = requests.get("https://api.example.com/data")
+    response.raise_for_status()
+    return response.json()
 
 
 def read_file_data():
@@ -56,9 +48,6 @@ def complex_function():
     except ValueError as e:
         print(f"值错误: {e}，使用默认值")
         return 10
-    except Exception as e:
-        print(f"发生未知错误: {e}")
-        return None
 
 
 def function_with_finally():
@@ -67,23 +56,13 @@ def function_with_finally():
         file = open("temp_file.txt", "w")
         file.write("一些数据")
         return True
-    except Exception as e:
-        print(f"操作失败: {e}")
-        return False
     finally:
         file.close()
 
 
 def function_with_else():
     """包含 else 块的函数，保留其他 try 结构"""
-    try:
-        value = int(input("请输入一个数字: "))
-    except Exception as e:
-        print(f"输入错误: {e}")
-        return None
-    else:
-        print(f"你输入的是: {value}")
-        return value
+    value = int(input("请输入一个数字: "))
 
 
 # 主程序示例
@@ -92,12 +71,8 @@ if __name__ == "__main__":
     
     config = load_config()
     print(f"配置: {config}")
-    
-    try:
-        api_data = call_external_api()
-        print(f"API 数据: {api_data}")
-    except Exception as e:
-        print(f"API 调用失败: {e}")
+    api_data = call_external_api()
+    print(f"API 数据: {api_data}")
     
     file_data = read_file_data()
     print(f"文件数据: {file_data}")

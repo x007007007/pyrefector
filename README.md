@@ -57,6 +57,12 @@
          return None
      ```
 
+#### c. 处理策略
+我们的工具根据以下策略处理防御式 try-except：
+- 如果移除 `except Exception` 块后还有其他 try 结构（如 `else`、`finally` 或其他非 Exception 类型的异常捕获），则保留整个 try 结构，只删除 `except Exception` 部分
+- 如果没有其他结构，则删除整个 try 结构
+- 这些策略通过命令行参数控制
+
 ### 3.2 使用方法
 
 #### 命令行接口
@@ -113,6 +119,11 @@ python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-l
 #### 示例场景 3：只移除重新抛出异常的模式
 ```bash
 python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --no-print-log --no-return-none --dry-run
+```
+
+#### 示例场景 4：保留返回 None 的模式，只移除其他两种模式
+```bash
+python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --no-return-none --dry-run
 ```
 
 ### 3.4 工作原理

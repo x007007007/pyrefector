@@ -74,12 +74,9 @@ def call_external_api():
 
 def read_file_data():
     """读取文件数据的函数，包含返回 None 的 except 块"""
-    try:
-        with open("data.txt", "r") as f:
-            data = f.read()
-        return data.strip()
-    except Exception:
-        return None
+    with open("data.txt", "r") as f:
+        data = f.read()
+    return data.strip()
 
 
 # 模拟辅助函数（实际项目中这些函数会有实际实现）

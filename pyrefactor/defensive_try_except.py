@@ -96,31 +96,69 @@ def is_defensive_except_body(
     
     # 检查每个语句
     print(f"Except block has {len(statements)} statements")
+    
+    has_print = False
+    has_raise = False
+    has_return_none = False
+    other_statements = 0
+    
     for stmt in statements:
         print(f"Stmt type: {type(stmt)}, Content: {repr(str(stmt))}")
         
-        # 检查是否有返回语句
-        if isinstance(stmt, cst.Return):
-            # 检查返回是否是 None
-            if check_return_none and is_return_none(stmt):
-                print("✓ Except block returns None")
-                return True
+        # 辅助函数：检查单个语句的类型
+        def check_stmt(s):
+            nonlocal has_print, has_raise, has_return_none, other_statements
+            if has_print_statement(s):
+                has_print = True
+            elif has_raise_statement(s):
+                has_raise = True
+            elif is_return_none(s):
+                has_return_none = True
+            else:
+                other_statements += 1
         
-        # 检查是否有 print 语句
-        if check_print_log and has_print_statement(stmt):
-            print("✓ Except block has print statement")
+        # 如果是 SimpleStatementLine，检查其 body 内容
+        if isinstance(stmt, cst.SimpleStatementLine):
+            for part in stmt.body:
+                check_stmt(part)
+        else:
+            check_stmt(stmt)
+    
+    print(f"Stats: has_print={has_print}, has_raise={has_raise}, has_return_none={has_return_none}, other_statements={other_statements}")
+    
+    # 判断是否是防御式异常处理
+    if other_statements > 0:
+        return False
+    
+    # 检查各种模式组合
+    if check_print_log and check_return_none:
+        if (has_print and not has_raise and has_return_none):
             return True
-        
-        # 检查是否有重新抛出异常的语句
-        if check_rethrow and has_raise_statement(stmt):
-            print("✓ Except block rethrows exception")
-            return True
+    elif check_print_log and not check_return_none:
+        if (has_print and not has_raise and has_return_none):
+            return False
+    elif not check_print_log and check_return_none:
+        if (has_print and not has_raise and has_return_none):
+            return False
+    else:
+        return False
+    
+    if has_print and not has_raise and not has_return_none:
+        return True
+    if has_raise and not has_print and not has_return_none:
+        return True
+    if has_return_none and not has_print and not has_raise:
+        return True
+    if has_print and has_raise and not has_return_none:
+        return True
     
     return False
 
 
-def is_return_none(return_stmt: cst.Return) -> bool:
+def is_return_none(return_stmt: cst.CSTNode) -> bool:
     """检查返回语句是否返回 None"""
+    if not isinstance(return_stmt, cst.Return):
+        return False
     return return_stmt.value is None or (
         isinstance(return_stmt.value, cst.Name) and return_stmt.value.value == "None"
     )
@@ -128,20 +166,32 @@ def is_return_none(return_stmt: cst.Return) -> bool:
 
 def has_print_statement(stmt: cst.CSTNode) -> bool:
     """检查是否有 print 语句"""
+    # 如果是 SimpleStatementLine，检查其 body 内容
     if isinstance(stmt, cst.SimpleStatementLine):
         for part in stmt.body:
             if isinstance(part, cst.Expr) and isinstance(part.value, cst.Call):
                 func = part.value.func
                 if isinstance(func, cst.Name) and func.value == "print":
                     return True
+    # 如果是直接的 Expr/Call
+    elif isinstance(stmt, cst.Expr) and isinstance(stmt.value, cst.Call):
+        func = stmt.value.func
+        if isinstance(func, cst.Name) and func.value == "print":
+            return True
     return False
 
 
 def has_raise_statement(stmt: cst.CSTNode) -> bool:
     """检查是否有 raise 语句"""
-    return isinstance(stmt, cst.SimpleStatementLine) and any(
-        isinstance(part, cst.Raise) for part in stmt.body
-    )
+    # 如果是 SimpleStatementLine，检查其 body 内容
+    if isinstance(stmt, cst.SimpleStatementLine):
+        for part in stmt.body:
+            if isinstance(part, cst.Raise):
+                return True
+    # 如果是直接的 Raise
+    elif isinstance(stmt, cst.Raise):
+        return True
+    return False
 
 
 class DefensiveTryExceptTransformer(cst.CSTTransformer):
@@ -168,17 +218,60 @@ class DefensiveTryExceptTransformer(cst.CSTTransformer):
     def leave_Try(self, original_node: cst.Try, updated_node: cst.Try) -> cst.CSTNode:
         """处理 Try 节点"""
         print(f"Leaving try node, checking if defensive")
-        if is_defensive_try_except(
-            original_node, 
-            self.max_try_length,
-            self.check_print_log,
-            self.check_rethrow,
-            self.check_return_none
-        ):
+        # 找到所有防御式的 except Exception 处理程序
+        defensive_handlers = []
+        non_defensive_handlers = []
+        
+        for handler in original_node.handlers:
+            # 检查是否是捕获所有异常的处理程序
+            is_catch_all = False
+            if handler.type is None:
+                is_catch_all = True
+            elif isinstance(handler.type, cst.Name) and handler.type.value == "Exception":
+                is_catch_all = True
+            
+            if is_catch_all:
+                # 检查是否是防御式处理
+                if is_defensive_except_body(handler.body, self.check_print_log, self.check_rethrow, self.check_return_none):
+                    defensive_handlers.append(handler)
+                else:
+                    non_defensive_handlers.append(handler)
+            else:
+                non_defensive_handlers.append(handler)
+        
+        # 判断是否有防御式处理
+        has_defensive_handlers = len(defensive_handlers) > 0
+        has_catch_all = len(defensive_handlers) > 0 or any(
+            h.type is None or (isinstance(h.type, cst.Name) and h.type.value == "Exception") 
+            for h in non_defensive_handlers
+        )
+        
+        # 检查 try 块长度
+        if hasattr(original_node.body, 'body'):
+            try_length = len(original_node.body.body)
+        else:
+            try_length = 0
+        
+        # 判断是否是防御式 try-except
+        if (has_defensive_handlers) or (has_catch_all and try_length > self.max_try_length):
             self.changes_made = True
-            print(f"✓ 移除防御式 try-except")
-            # 移除 try-except，直接返回 try 块的内容
-            return cst.FlattenSentinel(original_node.body.body)
+            
+            # 处理后的 try 语句必须至少有一个有效的 except 或 finally 块
+            if non_defensive_handlers or original_node.finalbody:
+                # 还有其他处理程序或 finally 块，只移除防御式的 handler
+                print("✓ 移除防御式的 except Exception 处理")
+                return original_node.with_changes(
+                    handlers=non_defensive_handlers
+                )
+            elif original_node.orelse:
+                # 只有 else 块而没有 except 或 finally 块，这是无效的，需要移除整个 try 块
+                print("✓ 移除整个防御式 try-except (else 块无效)")
+                return cst.FlattenSentinel(original_node.body.body)
+            else:
+                # 没有其他结构，移除整个 try 块
+                print("✓ 移除整个防御式 try-except")
+                return cst.FlattenSentinel(original_node.body.body)
+        
         return updated_node
 
 
@@ -232,7 +325,7 @@ def rewrite_file_for_defensive_try_except(
 
 
 def rewrite_directory_for_defensive_try_except(
-    directory: str,
+    path: str,
     max_try_length: int = 30,
     dry_run: bool = False,
     output_diff: Optional[str] = None,
@@ -240,43 +333,75 @@ def rewrite_directory_for_defensive_try_except(
     check_rethrow: bool = True,
     check_return_none: bool = True
 ) -> List[str]:
-    """重写目录中的所有 Python 文件以移除防御式 try-except"""
+    """重写目录或单个文件中的所有 Python 文件以移除防御式 try-except"""
     modified_files = []
     
-    # 遍历目录
-    for root, dirs, files in os.walk(directory):
-        for file_name in files:
-            if file_name.endswith('.py'):
-                file_path = os.path.join(root, file_name)
+    if os.path.isfile(path) and path.endswith('.py'):
+        # 处理单个文件
+        transformed_code = rewrite_file_for_defensive_try_except(
+            path,
+            max_try_length,
+            dry_run,
+            check_print_log,
+            check_rethrow,
+            check_return_none
+        )
+        
+        if transformed_code is not None:
+            modified_files.append(path)
+            
+            # 如果需要输出 diff 且是 dry_run
+            if dry_run and output_diff:
+                with open(path, 'r', encoding='utf-8') as f:
+                    original_code = f.read()
                 
-                # 重写文件
-                transformed_code = rewrite_file_for_defensive_try_except(
-                    file_path,
-                    max_try_length,
-                    dry_run,
-                    check_print_log,
-                    check_rethrow,
-                    check_return_none
-                )
+                # 生成 diff
+                diff_text = ''.join(difflib.unified_diff(
+                    original_code.splitlines(True),
+                    transformed_code.splitlines(True),
+                    fromfile=path,
+                    tofile=f"{path}.modified"
+                ))
                 
-                if transformed_code is not None:
-                    modified_files.append(file_path)
+                # 写入 diff 文件
+                with open(output_diff, 'a', encoding='utf-8') as f:
+                    f.write(diff_text)
+    
+    elif os.path.isdir(path):
+        # 遍历目录
+        for root, dirs, files in os.walk(path):
+            for file_name in files:
+                if file_name.endswith('.py'):
+                    file_path = os.path.join(root, file_name)
                     
-                    # 如果需要输出 diff 且是 dry_run
-                    if dry_run and output_diff:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            original_code = f.read()
+                    # 重写文件
+                    transformed_code = rewrite_file_for_defensive_try_except(
+                        file_path,
+                        max_try_length,
+                        dry_run,
+                        check_print_log,
+                        check_rethrow,
+                        check_return_none
+                    )
+                    
+                    if transformed_code is not None:
+                        modified_files.append(file_path)
                         
-                        # 生成 diff
-                        diff_text = ''.join(difflib.unified_diff(
-                            original_code.splitlines(True),
-                            transformed_code.splitlines(True),
-                            fromfile=file_path,
-                            tofile=f"{file_path}.modified"
-                        ))
-                        
-                        # 写入 diff 文件
-                        with open(output_diff, 'a', encoding='utf-8') as f:
-                            f.write(diff_text)
+                        # 如果需要输出 diff 且是 dry_run
+                        if dry_run and output_diff:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                original_code = f.read()
+                            
+                            # 生成 diff
+                            diff_text = ''.join(difflib.unified_diff(
+                                original_code.splitlines(True),
+                                transformed_code.splitlines(True),
+                                fromfile=file_path,
+                                tofile=f"{file_path}.modified"
+                            ))
+                            
+                            # 写入 diff 文件
+                            with open(output_diff, 'a', encoding='utf-8') as f:
+                                f.write(diff_text)
     
     return modified_files
