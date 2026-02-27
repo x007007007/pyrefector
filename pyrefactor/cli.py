@@ -40,6 +40,11 @@ def main() -> None:
     p_remove_try.add_argument("--max-length", type=int, default=30, help="try 块长度阈值（默认: 30）")
     p_remove_try.add_argument("--dry-run", action="store_true", help="仅输出 diff")
     p_remove_try.add_argument("--output-diff", help="将统一 diff 输出到文件")
+    
+    # 新增参数
+    p_remove_try.add_argument("--no-print-log", action="store_false", dest="check_print_log", help="不检查只打印日志的 except 块")
+    p_remove_try.add_argument("--no-rethrow", action="store_false", dest="check_rethrow", help="不检查重新抛出异常的 except 块")
+    p_remove_try.add_argument("--no-return-none", action="store_false", dest="check_return_none", help="不检查返回 None 的 except 块")
 
     args = parser.parse_args()
     if args.cmd == "refc_import":
@@ -91,7 +96,10 @@ def main() -> None:
             args.path,
             max_try_length=args.max_length,
             dry_run=args.dry_run,
-            output_diff=args.output_diff
+            output_diff=args.output_diff,
+            check_print_log=args.check_print_log,
+            check_rethrow=args.check_rethrow,
+            check_return_none=args.check_return_none
         )
         
         if not changes:

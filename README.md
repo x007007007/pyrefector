@@ -1,234 +1,183 @@
-# Python代码重构工具
+# Python 代码重构工具
 
-这是一个用于自动重构 Python 代码的工具，专注于以下核心功能：
+这是一个用于 Python 代码自动重构的工具，专注于以下几个核心功能：
 
-## 功能概览
+## 1. 函数拆分
+- 将过长的函数自动拆分为更小、更易维护的函数
+- 保留代码功能和行为不变
+- 支持处理带有 `self` 参数的方法
 
-### 1. 函数拆分
+## 2. 导入优化
+- 优化 Python 文件中的导入语句
+- 处理未使用的导入
+- 规范导入顺序
 
-自动分析和重构长函数为较小的、更易维护的函数单元。
+## 3. 防御式 Try-Except 移除
+- 自动识别并移除常见的防御式编程模式中的 try-except 语句
+- 支持对不同类型的防御式模式进行开关控制
 
-### 2. 导入优化
+### 3.1 识别的防御式 Try-Except 模式
 
-分析和优化 Python 导入语句，以提高代码质量和可读性。
+#### a. 基本模式
+- **过长的 try 块**：超过指定行数阈值的 try 块（默认 30 行）
+- **无类型异常捕获**：使用 `except:` 或 `except Exception:` 的语句
 
-### 3. 防御式Try-Except移除（新增功能）
+#### b. 防御式处理模式
+以下是常见的防御式异常处理模式，现在支持单独开关控制：
 
-自动识别并移除防御式 try-except 语句，同时保留合理的异常处理。
+1. **仅打印日志**：`check_print_log=True`（默认）
+   - 仅包含 `print()`、`logger()` 或类似日志记录语句的 except 块
+   - 示例：
+     ```python
+     try:
+         # 一些操作
+     except Exception as e:
+         print(f"Error: {e}")
+         return None
+     ```
 
-## 安装
+2. **重新抛出异常**：`check_rethrow=True`（默认）
+   - 在打印日志后重新抛出异常的 except 块
+   - 示例：
+     ```python
+     try:
+         # 一些操作
+     except Exception as e:
+         print(f"Error: {e}")
+         raise
+     ```
 
+3. **返回 None**：`check_return_none=True`（默认）
+   - 捕获异常后直接返回 None 的 except 块
+   - 示例：
+     ```python
+     try:
+         # 一些操作
+     except Exception:
+         return None
+     ```
+
+### 3.2 使用方法
+
+#### 命令行接口
 ```bash
-pip install -e .
+python -m pyrefactor remove_defensive_try <文件或目录路径>
 ```
 
-## 使用方法
+#### 可选参数
+- `--max-length <长度>`：设置 try 块长度阈值（默认 30 行）
+- `--no-print-log`：不检查仅打印日志的防御式模式
+- `--no-rethrow`：不检查重新抛出异常的防御式模式
+- `--no-return-none`：不检查返回 None 的防御式模式
+- `--dry-run`：仅显示修改预览，不实际修改文件
+- `--output-diff <文件>`：将修改差异输出到指定文件
 
-### 函数拆分
-
-```bash
-python -m pyrefactor split_func <文件或目录> [--options]
-```
-
-### 导入优化
-
-```bash
-python -m pyrefactor refc_import <文件或目录> [--options]
-```
-
-### 防御式Try-Except移除
-
-```bash
-python -m pyrefactor remove_defensive_try <文件或目录> [--options]
-```
-
-## 功能详解：防御式Try-Except移除
-
-### 问题背景
-
-防御式 try-except 语句（如 `except:` 或 `except Exception:`）通常用于捕获所有可能的异常，但这种做法往往会隐藏真正的问题，并导致难以调试的代码。
-
-### 识别标准
-
-该功能会识别以下模式的 try-except 语句：
-1. 使用 `except:`（无类型异常捕获）
-2. 使用 `except Exception:`（捕获所有异常）
-3. try 块长度超过指定阈值（默认 30 行）
-
-### 使用示例
-
-```bash
-# 处理单个文件，阈值设为20行
-python -m pyrefactor remove_defensive_try example_with_defensive_try.py --max-length 20
-
-# 处理整个目录，使用默认阈值30行
-python -m pyrefactor remove_defensive_try src/
-
-# 预览变更（dry run）
-python -m pyrefactor remove_defensive_try src/ --dry-run
-```
-
-### 功能特点
-
-1. **精确识别**：能够正确地区分防御式 try-except 和合理的异常处理
-2. **阈值可调**：支持自定义 try 块长度阈值
-3. **预览功能**：提供 dry run 模式，可预览变更而不修改文件
-4. **目录处理**：支持递归处理整个目录
-5. **报告输出**：提供详细的变更报告和差异输出
-
-## 示例说明
-
-在 `examples/defensive_try_except/` 目录中，包含一个完整的示例：
-
-### 原始代码
-
+#### Python API
 ```python
-def process_data(data):
-    """处理数据的函数，包含防御式 try-except"""
-    try:
-        # 这里有很多语句，超过了默认阈值（30行）
-        print("开始处理数据")
-        validated_data = validate_data(data)
-        
-        if not validated_data:
-            raise ValueError("数据验证失败")
-            
-        processed_data = transform_data(data)
-        
-        if is_empty(processed_data):
-            raise ValueError("处理后的数据为空")
-            
-        saved_data = save_to_database(processed_data)
-        
-        if not saved_data:
-            raise IOError("保存数据失败")
-            
-        send_notification("数据处理成功")
-        
-        # 添加更多语句以确保超过默认长度
-        temp_result = perform_calculations(data)
-        analyze_result(temp_result)
-        generate_report(temp_result)
-        archive_results(temp_result)
-        cleanup_temporary_files()
-        update_logs("处理完成")
-        check_system_health()
-        refresh_cache()
-        synchronize_data()
-        validate_system_state()
-        perform_backup()
-        test_connections()
-        reset_counters()
-        
-        return True
-    except:
-        print("发生异常，但继续执行")
-        return False
+from pyrefactor.defensive_try_except import rewrite_file_for_defensive_try_except, rewrite_directory_for_defensive_try_except
 
-def calculate_statistics(data):
-    """计算统计数据的函数，包含捕获具体错误的 try-except"""
-    try:
-        # 这是一个较短的 try 块，捕获具体的异常
-        result = compute_average(data)
-        if result < 0:
-            raise ValueError("平均值不能为负数")
-        return result
-    except ValueError as e:
-        print(f"计算统计数据时出错: {e}")
-        return 0
-    except ZeroDivisionError as e:
-        print(f"计算统计数据时出错: {e}")
-        return 0
+# 处理单个文件
+result = rewrite_file_for_defensive_try_except(
+    "path/to/your/file.py",
+    max_try_length=30,
+    check_print_log=True,
+    check_rethrow=True,
+    check_return_none=True,
+    dry_run=False
+)
+
+# 处理整个目录
+modified_files = rewrite_directory_for_defensive_try_except(
+    "path/to/your/directory",
+    max_try_length=30,
+    check_print_log=True,
+    check_rethrow=True,
+    check_return_none=True,
+    dry_run=False,
+    output_diff="defensive_try_changes.diff"
+)
 ```
 
-### 转换后的代码
+### 3.3 使用示例
 
-```python
-def process_data(data):
-    """处理数据的函数，包含防御式 try-except"""
-    # 这里有很多语句，超过了默认阈值（30行）
-    print("开始处理数据")
-    validated_data = validate_data(data)
-    
-    if not validated_data:
-        raise ValueError("数据验证失败")
-        
-    processed_data = transform_data(data)
-    
-    if is_empty(processed_data):
-        raise ValueError("处理后的数据为空")
-        
-    saved_data = save_to_database(processed_data)
-    
-    if not saved_data:
-        raise IOError("保存数据失败")
-        
-    send_notification("数据处理成功")
-    
-    # 添加更多语句以确保超过默认长度
-    temp_result = perform_calculations(data)
-    analyze_result(temp_result)
-    generate_report(temp_result)
-    archive_results(temp_result)
-    cleanup_temporary_files()
-    update_logs("处理完成")
-    check_system_health()
-    refresh_cache()
-    synchronize_data()
-    validate_system_state()
-    perform_backup()
-    test_connections()
-    reset_counters()
-    
-    return True
-
-def calculate_statistics(data):
-    """计算统计数据的函数，包含捕获具体错误的 try-except"""
-    try:
-        # 这是一个较短的 try 块，捕获具体的异常
-        result = compute_average(data)
-        if result < 0:
-            raise ValueError("平均值不能为负数")
-        return result
-    except ValueError as e:
-        print(f"计算统计数据时出错: {e}")
-        return 0
-    except ZeroDivisionError as e:
-        print(f"计算统计数据时出错: {e}")
-        return 0
+#### 示例场景 1：移除所有防御式模式
+```bash
+python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --dry-run
 ```
 
-### 说明
+#### 示例场景 2：只移除仅打印日志的模式
+```bash
+python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --no-rethrow --no-return-none --dry-run
+```
 
-1. **移除了防御式 try-except**：`process_data()` 函数中的 `except:` 语句被移除
-2. **保留了合理的异常处理**：`calculate_statistics()` 函数中的 `except ValueError` 和 `except ZeroDivisionError` 保留不变
-3. **提高了代码质量**：移除了隐藏真正问题的防御式 try-except，同时保留了精确的错误处理
+#### 示例场景 3：只移除重新抛出异常的模式
+```bash
+python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --no-print-log --no-return-none --dry-run
+```
 
-## 测试
+### 3.4 工作原理
+1. 识别所有包含 `except:` 或 `except Exception:` 的 try-except 语句
+2. 检查 try 块长度是否超过阈值
+3. 分析 except 块的内容，判断是否是防御式处理模式
+4. 根据配置的开关决定是否移除该 try-except 语句
+5. 输出修改后的代码
 
-运行所有测试：
+### 3.5 注意事项
+- 该功能会改变代码的错误处理行为，请在使用前确保对代码有充分的测试覆盖
+- 使用 `--dry-run` 参数可以先查看修改预览，避免意外
+- 某些情况下，防御式 try-except 可能是有意设计的，请谨慎使用
+
+## 项目结构
+```
+python-refactor-tool/
+├── examples/               # 示例代码
+│   ├── function_splitter/  # 函数拆分示例
+│   └── defensive_try_except/  # 防御式 try-except 示例
+├── pyrefactor/             # 核心重构模块
+│   ├── __init__.py
+│   ├── functions.py        # 函数拆分实现
+│   ├── defensive_try_except.py  # 防御式 try-except 实现
+│   └── imports_refactor.py  # 导入优化实现
+├── tests/                  # 单元测试
+│   ├── test_functions.py
+│   └── test_defensive_try_except.py
+└── README.md               # 项目说明文档
+```
+
+## 安装和使用
+
+1. 克隆仓库：
+   ```bash
+   git clone https://github.com/yourusername/python-refactor-tool.git
+   cd python-refactor-tool
+   ```
+
+2. 创建并激活虚拟环境（可选但推荐）：
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # 或 venv\Scripts\activate  # Windows
+   ```
+
+3. 安装依赖：
+   ```bash
+   pip install -e .
+   ```
+
+4. 运行示例：
+   ```bash
+   # 函数拆分示例
+   python -m pyrefactor split_func examples/function_splitter/ --dry-run
+   
+   # 防御式 try-except 移除示例
+   python -m pyrefactor remove_defensive_try examples/defensive_try_except/ --max-length 20 --dry-run
+   ```
+
+## 运行测试
 
 ```bash
-pytest tests/
+python -m pytest tests/ -v
 ```
-
-运行特定功能的测试：
-
-```bash
-# 函数拆分
-pytest tests/test_functions.py -v
-
-# 导入优化
-pytest tests/test_import_refactor.py -v
-
-# 防御式Try-Except移除
-pytest tests/test_defensive_try_except.py -v
-```
-
-## 贡献
-
-欢迎提交 PR 和问题。
 
 ## 许可证
-
-MIT
+MIT License
